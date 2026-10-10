@@ -91,3 +91,17 @@ def test_upscale_has_no_scale_parameter():
     props = tools["novelai_upscale"].input_schema["properties"]
     assert "scale" not in props
     assert "model" in props
+
+
+def test_schemas_use_one_of_instead_of_any_of():
+    """Advertised schemas avoid anyOf, which some MCP clients (e.g. DSH) reject."""
+    import json
+
+    for tool in asyncio.run(server.list_tools()):
+        assert '"anyOf"' not in json.dumps(tool.input_schema), tool.name
+        if tool.output_schema is not None:
+            assert '"anyOf"' not in json.dumps(tool.output_schema), tool.name
+
+    tools = {t.name: t for t in asyncio.run(server.list_tools())}
+    negative = tools["novelai_generate_image"].input_schema["properties"]["negative_prompt"]
+    assert negative["oneOf"] == [{"type": "string"}, {"type": "null"}]

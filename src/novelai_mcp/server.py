@@ -457,6 +457,31 @@ async def novelai_suggest_tags(
     return f"Tag suggestions for '{query}':\n" + "\n".join(formatted)
 
 
+def _any_of_to_one_of(schema: Any) -> Any:
+    """Rewrite ``anyOf`` as ``oneOf`` in a JSON schema.
+
+    Pydantic renders ``Optional[X]`` as ``anyOf: [X, null]``; some MCP clients
+    (e.g. DSH) only accept ``oneOf``. The branches here are mutually exclusive,
+    so the rewrite keeps the meaning. Argument validation still uses the
+    pydantic model, so this only changes the advertised schema.
+    """
+    if isinstance(schema, dict):
+        return {("oneOf" if k == "anyOf" else k): _any_of_to_one_of(v) for k, v in schema.items()}
+    if isinstance(schema, list):
+        return [_any_of_to_one_of(v) for v in schema]
+    return schema
+
+
+def _normalize_tool_schemas() -> None:
+    for tool in server._tool_manager.list_tools():
+        tool.parameters = _any_of_to_one_of(tool.parameters)
+        if tool.output_schema is not None:
+            tool.output_schema = _any_of_to_one_of(tool.output_schema)
+
+
+_normalize_tool_schemas()
+
+
 def main():
     """Run the MCP server over stdio."""
     server.run(transport="stdio")
